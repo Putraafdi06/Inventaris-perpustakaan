@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inventaris Perpustakaan</title>
+<style>
+:root{--bg:#eef2f5;--panel:#fff;--ink:#14213d;--muted:#5b6678;--line:#d5dce4;--teal:#0f766e;--amber:#b45309;--red:#b42318;--tealbg:#dff3f0;--amberbg:#fdeccf}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+h1,h2{font-family:"Iowan Old Style",Georgia,serif;margin:0}
+header{background:var(--ink);color:#fff;padding:28px 20px}
+header div,main{max-width:1000px;margin:0 auto}
+header h1{font-size:2rem}
+header p{margin:4px 0 0;color:#b9c4d6}
+main{padding:20px;display:grid;gap:20px}
+.stats{display:flex;gap:12px;flex-wrap:wrap}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 16px;min-width:120px}
+.stat b{font-family:Georgia,serif;font-size:1.6rem;display:block}
+section{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px}
+section h2{font-size:1.25rem;margin-bottom:12px}
+form.add{display:grid;grid-template-columns:2fr 1.5fr auto;gap:10px}
+input{font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:4px;width:100%;background:#fff;color:var(--ink)}
+button{font:inherit;cursor:pointer;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:9px 14px;border-radius:4px}
+button.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+button.small{padding:5px 10px;font-size:.9rem}
+button.danger{background:#fff;color:var(--red);border-color:#f0c4c0}
+:focus-visible{outline:3px solid #2f80ed;outline-offset:2px}
+.tools{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.tools input{flex:1;min-width:200px}
+.table{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{color:var(--muted);font-weight:600;font-size:.9rem}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:.85rem;font-weight:600}
+.ok{background:var(--tealbg);color:var(--teal)}
+.out{background:var(--amberbg);color:var(--amber)}
+.late{background:#fde4e1;color:var(--red)}
+.empty{color:var(--muted);padding:16px 0}
+.actions{display:flex;gap:6px;flex-wrap:wrap}
+dialog{border:1px solid var(--line);border-radius:8px;padding:20px;max-width:380px;width:92%}
+dialog::backdrop{background:rgba(20,33,61,.5)}
+dialog label{display:block;margin:10px 0 4px;font-weight:600}
+dialog .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+ul.log{list-style:none;margin:0;padding:0;max-height:260px;overflow:auto}
+ul.log li{padding:8px 0;border-bottom:1px solid var(--line);font-size:.95rem}
+ul.log time{color:var(--muted);margin-right:8px}
+@media(max-width:640px){form.add{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><div>
+<h1>Inventaris Perpustakaan</h1>
+<p>Catat buku, peminjam, dan pengembalian di satu tempat.</p>
+</div></header>
+
+<main>
+<div class="stats">
+<div class="stat"><b id="sTotal">0</b>Total buku</div>
+<div class="stat"><b id="sAvail">0</b>Tersedia</div>
+<div class="stat"><b id="sOut">0</b>Dipinjam</div>
+<div class="stat"><b id="sLate">0</b>Terlambat</div>
+</div>
+
+<section>
+<h2>Tambah buku</h2>
+<form class="add" id="addForm">
+<input id="title" placeholder="Judul buku" required aria-label="Judul buku">
+<input id="author" placeholder="Penulis (opsional)" aria-label="Penulis">
+<button type="submit">Simpan buku</button>
+</form>
+</section>
+
+<section>
+<h2>Daftar buku</h2>
+<div class="tools">
+<input id="search" type="search" placeholder="Cari judul, penulis, atau peminjam" aria-label="Cari">
+<button class="ghost" id="exportBtn">Ekspor data</button>
+<button class="ghost" id="importBtn">Impor data</button>
+<input type="file" id="importFile" accept="application/json" hidden>
+</div>
+<div class="table">
+<table>
+<thead><tr><th>Judul</th><th>Penulis</th><th>Status</th><th>Peminjam</th><th>Tenggat</th><th>Aksi</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</div>
+<p class="empty" id="empty" hidden>Belum ada buku. Tambahkan buku pertama di atas.</p>
+</section>
+
+<section>
+<h2>Riwayat</h2>
+<ul class="log" id="log"></ul>
+<p class="empty" id="logEmpty">Belum ada aktivitas peminjaman.</p>
+</section>
+</main>
+
+<dialog id="borrowDlg">
+<form method="dialog" id="borrowForm">
+<h2>Pinjamkan buku</h2>
+<p id="borrowTitle"></p>
+<label for="borrower">Nama peminjam</label>
+<input id="borrower" required>
+<label for="due">Tenggat kembali</label>
+<input id="due" type="date" required>
+<div class="row">
+<button type="button" class="ghost" id="cancelBorrow">Batal</button>
+<button type="submit">Simpan peminjaman</button>
+</div>
+</form>
+</dialog>
+
+<script>
+const KEY = "inventaris-perpustakaan-v1";
+let state = load();
+let borrowId = null;
+
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s && Array.isArray(s.books) && Array.isArray(s.log)) return s;
+  } catch (e) {}
+  return { books: [], log: [] };
+}
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { alert("Data tidak bisa disimpan di browser ini."); }
+}
+const $ = id => document.getElementById(id);
+const today = () => new Date().toISOString().slice(0, 10);
+const fmt = d => d ? new Date(d + "T00:00:00").toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" }) : "-";
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+function addLog(type, title, name) {
+  state.log.unshift({ time: new Date().toISOString(), type, title, name: name || "" });
+  state.log = state.log.slice(0, 200);
+}
+
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function render() {
+  const q = $("search").value.trim().toLowerCase();
+  const rows = $("rows");
+  rows.replaceChildren();
+  const list = state.books.filter(b =>
+    [b.title, b.author, b.borrower].join(" ").toLowerCase().includes(q));
+
+  list.forEach(b => {
+    const tr = document.createElement("tr");
+    const isOut = !!b.borrower;
+    const late = isOut && b.due < today();
+    tr.append(el("td", b.title), el("td", b.author || "-"));
+    const st = el("td");
+    st.append(el("span", late ? "Terlambat" : isOut ? "Dipinjam" : "Tersedia",
+      "badge " + (late ? "late" : isOut ? "out" : "ok")));
+    tr.append(st, el("td", isOut ? b.borrower : "-"), el("td", isOut ? fmt(b.due) : "-"));
+    const act = el("td");
+    const box = el("div", undefined, "actions");
+    if (isOut) {
+      const r = el("button", "Kembalikan", "small");
+      r.onclick = () => returnBook(b.id);
+      box.append(r);
+    } else {
+      const p = el("button", "Pinjamkan", "small");
+      p.onclick = () => openBorrow(b.id);
+      box.append(p);
+    }
+    const d = el("button", "Hapus", "small danger");
+    d.onclick = () => deleteBook(b.id);
+    box.append(d);
+    act.append(box);
+    tr.append(act);
+    rows.append(tr);
+  });
+
+  $("empty").hidden = list.length > 0;
+  $("empty").textContent = state.books.length ? "Tidak ada buku yang cocok dengan pencarian." : "Belum ada buku. Tambahkan buku pertama di atas.";
+
+  const out = state.books.filter(b => b.borrower);
+  $("sTotal").textContent = state.books.length;
+  $("sOut").textContent = out.length;
+  $("sAvail").textContent = state.books.length - out.length;
+  $("sLate").textContent = out.filter(b => b.due < today()).length;
+
+  const log = $("log");
+  log.replaceChildren();
+  state.log.slice(0, 50).forEach(l => {
+    const li = document.createElement("li");
+    const t = el("time", new Date(l.time).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" }));
+    const msg = { add: `Buku ditambahkan: ${l.title}`, out: `${l.name} meminjam ${l.title}`, in: `${l.name} mengembalikan ${l.title}`, del: `Buku dihapus: ${l.title}` }[l.type];
+    li.append(t, document.createTextNode(msg));
+    log.append(li);
+  });
+  $("logEmpty").hidden = state.log.length > 0;
+}
+
+$("addForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const title = $("title").value.trim();
+  if (!title) return;
+  state.books.unshift({ id: uid(), title, author: $("author").value.trim(), borrower: "", borrowedAt: "", due: "" });
+  addLog("add", title);
+  save(); render();
+  e.target.reset();
+  $("title").focus();
+});
+
+function openBorrow(id) {
+  borrowId = id;
+  const b = state.books.find(x => x.id === id);
+  $("borrowTitle").textContent = b.title;
+  $("borrower").value = "";
+  const d = new Date(); d.setDate(d.getDate() + 7);
+  $("due").value = d.toISOString().slice(0, 10);
+  $("due").min = today();
+  $("borrowDlg").showModal();
+  $("borrower").focus();
+}
+$("cancelBorrow").onclick = () => $("borrowDlg").close();
+$("borrowForm").addEventListener("submit", () => {
+  const b = state.books.find(x => x.id === borrowId);
+  const name = $("borrower").value.trim();
+  if (!b || !name) return;
+  b.borrower = name; b.borrowedAt = today(); b.due = $("due").value;
+  addLog("out", b.title, name);
+  save(); render();
+});
+
+function returnBook(id) {
+  const b = state.books.find(x => x.id === id);
+  if (!b) return;
+  addLog("in", b.title, b.borrower);
+  b.borrower = ""; b.borrowedAt = ""; b.due = "";
+  save(); render();
+}
+
+function deleteBook(id) {
+  const b = state.books.find(x => x.id === id);
+  if (!b || !confirm(`Hapus "${b.title}" dari inventaris?`)) return;
+  state.books = state.books.filter(x => x.id !== id);
+  addLog("del", b.title);
+  save(); render();
+}
+
+$("search").addEventListener("input", render);
+
+$("exportBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "inventaris-perpustakaan-" + today() + ".json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+$("importBtn").onclick = () => $("importFile").click();
+$("importFile").onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const s = JSON.parse(r.result);
+      if (!Array.isArray(s.books) || !Array.isArray(s.log)) throw 0;
+      if (!confirm("Data saat ini akan diganti dengan isi file. Lanjutkan?")) return;
+      state = s; save(); render();
+    } catch (err) { alert("File tidak valid. Gunakan file hasil Ekspor data."); }
+  };
+  r.readAsText(f);
+  e.target.value = "";
+};
+
+render();
+</script>
+</body>
+</html>
